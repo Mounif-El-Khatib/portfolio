@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <title>SemicolonCTF 2025 — Full Writeup | mounif</title>
+  </head>
+  <body>
+    <div class="container">
+      <a class="back" href="index.html">
+        <svg
+          width="12"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        back
+      </a>
+      <div class="post-header">
+        <h1>SemicolonCTF 2025 — Full Competition Writeup</h1>
+        <div class="post-meta">
+          <span>SemicolonCTF 2025 &times; Toters</span>
+          <span class="tag">3 hours</span>
+          <span class="tag">on-site</span>
+          <span class="result">4th / 276 teams</span>
+        </div>
+      </div>
+
+      <p>
+        SemicolonCTF 2025 was sponsored by Toters and had two rounds: a
+        semifinal and a final. We placed 4th out of 276 teams in the final.
+        There were a lot more challenges than what's here; each category had
+        multiple problems across both rounds. These are the ones I worked on and
+        remember well enough to write up properly. I didn't have time to
+        screenshot anything during the competition, so this is reconstructed
+        from memory and old chat logs.
+      </p>
+
+      <div class="toc">
+        <div class="toc-title">challenges</div>
+        <ul>
+          <li>
+            <a href="#crypto">Crypto — AES-ECB Image Recovery (partial)</a>
+          </li>
+          <li><a href="#android">Android RE — APK Flag Hunting</a></li>
+          <li><a href="#ghidra">Binary RE — Ghidra Native Lib</a></li>
+          <li>
+            <a href="#powershell">PowerShell — Obfuscated Decryption Script</a>
+          </li>
+          <li><a href="#binaries">Binaries — Pulling Flags with strings</a></li>
+          <li><a href="#ai">AI Chatbot — Prompt Injection</a></li>
+          <li><a href="#web">Web — Unsolved</a></li>
+          <li><a href="#team">Team — OSINT &amp; Machine Exploitation</a></li>
+        </ul>
+      </div>
+
+      <h2 id="crypto">01 — Crypto: AES-ECB Image Recovery (partial solve)</h2>
+
+      <p>
+        We got an encrypted image (<code>catch_me.bmp</code>) and a text file
+        (<code>catch_me.txt</code>) with four lines:
+      </p>
+
+      <pre>
+<span class="key">U2VtaWNvbG9uQ1RGMjV4VG90ZXJz</span>                  — Line 1
+<span class="hint">77b7e24bb3642a4b9d3081d393785273</span>              — Line 2
+7dddbfabef0e23edd753c1006c1cbf3f99380a57fa    — Line 3
+e94fd5250dcca0a3b0cea1651f0a821b              — Line 4</pre>
+
+      <p>
+        The challenge stated: Line 1 is "a clue in disguise", Line 2 is raw hex,
+        Line 3 is a transformation of Line 2, and Line 4 "might unlock something
+        vital". The image was encrypted with AES-128 in ECB mode.
+      </p>
+
+      <h3>What I figured out</h3>
+
+      <p>
+        <strong>Line 1</strong> was base64. Decoding it gives
+        <code>SemicolonCTF25xToters</code>, just the competition branding.
+      </p>
+
+      <p>
+        <strong>Line 2</strong> is a 32-char hex string, so 128 bits, which is
+        the correct size for an AES-128 key.
+      </p>
+
+      <p>
+        <strong>Line 3</strong> is a 42-char hex string. The challenge said it's
+        "a transformation of Line 2" but I wasn't able to figure out the exact
+        relationship. It's not a standard hash length, because SHA-1 would be 40
+        chars, SHA-256 would be 64. Could be a truncated HMAC, some custom
+        encoding, or something else entirely.
+      </p>
+
+      <p>
+        <strong>Line 4</strong> is another 32-char hex string. Another
+        AES-128-sized value.
+      </p>
+
+      <h3>Where I got stuck</h3>
+
+      <p>
+        I identified what each line likely was: base64, hex values, and a
+        transformation I couldn't figure out, but I couldn't piece together how
+        they all connected to get the actual decryption key. I tried using both
+        Line 2 and Line 4 as the AES key but nothing produced a valid BMP header
+        in the output.
+      </p>
+
+      <p>
+        The base64 decode on Line 1 was straightforward, and Lines 2 and 4 being
+        AES-128 key length was a reasonable guess. But I never cracked the
+        relationship between Lines 2 and 3, and without that I couldn't be sure
+        which value was the actual decryption key.
+      </p>
+
+      <hr class="separator" />
+
+      <h2 id="android">02 — Android RE: APK Flag Hunting</h2>
+
+      <p>
+        We were given <code>ctf_challenge.apk</code> with flags buried in native
+        libs, resources, and bytecode, along with a bunch of decoy flags meant
+        to waste our time.
+      </p>
+
+      <h3>First pass</h3>
+
+      <p>
+        I started simple: <code>strings</code> piped into <code>grep</code>:
+      </p>
+
+      <pre>strings ctf_challenge.apk | grep -i "CTF{"</pre>
+
+      <p>
+        Got a lot of matches back. I had to figure out the real ones from the
+        fakes.
+      </p>
+
+      <h3>Sorting real from fake</h3>
+
+      <p>
+        I grepped through the decompiled output to trace where each flag
+        actually came from:
+      </p>
+
+      <pre><span class="decoy">CTF{this_is_not_the_flag}</span>             — decoy, showed up everywhere
+<span class="flag">CTF{adb_hunt3r_f0und_n4t1v3}</span>          — native libraries (all 4 ABIs)
+<span class="flag">CTF{r3s0urc3_hunt3r_2024}</span>             — resources.arsc
+<span class="hint">CTF{md5_XXXXXXXX}</span>                     — format hint in classes.dex</pre>
+
+      <p>
+        The native libs had the same flag across all four architectures, which
+        makes sense, same source code compiled for different ABIs:
+      </p>
+
+      <pre><span class="path">lib/arm64-v8a/libnative-lib.so</span>
+<span class="path">lib/x86/libnative-lib.so</span>
+<span class="path">lib/armeabi-v7a/libnative-lib.so</span>
+<span class="path">lib/x86_64/libnative-lib.so</span></pre>
+
+      <div class="callout warn">
+        <code>CTF{this_is_not_the_flag}</code> was everywhere. Dozens of times.
+        It's there to flood my <code>grep</code> output so I can't just blindly
+        pipe my way to the answer, I had to actually look at where each string
+        lives and decide if it's real.
+      </div>
+
+      <p>
+        There was also a partial match in <code>res/kX.xml</code>, some
+        obfuscated resource XML. The resource flag
+        <code>CTF{r3s0urc3_hunt3r_2024}</code> showed up in both
+        <code>resources.arsc</code> and the APK itself.
+      </p>
+
+      <hr class="separator" />
+
+      <h2 id="ghidra">03 — Binary RE: Ghidra Native Library</h2>
+
+      <p>
+        This one involved a native library with an intentionally ugly name:
+        <code>za23jhfbsdveq</code>, loaded by an activity called
+        <code>Tryhard</code>. The Java side was bare bones:
+      </p>
+
+      <pre>
+public class Tryhard extends AppCompatActivity {
+    static { System.loadLibrary("za23jhfbsdveq"); }
+    public native String ehjfbidphfaw();
+}</pre
+      >
+
+      <p>
+        This just loads the lib and calls a native method with a gibberish name.
+        The actual logic was in the compiled native code.
+      </p>
+
+      <h3>Looking at it in Ghidra</h3>
+
+      <p>
+        I loaded the <code>.so</code> into Ghidra and checked the
+        <code>.rodata</code> section. Found this sitting in memory:
+      </p>
+
+      <pre>0001e8f8  43 54 46 7b 67 68 31 64 72 34   <span class="flag">CTF{gh1dr4</span>_g0nn4_h3lp_y0
+          Pure virtual function called!</pre>
+
+      <p>
+        Looks like the flag bleeds into some C++ runtime garbage. If I just
+        trusted <code>strings</code> output, the flag would be
+        <code>CTF{gh1dr4_g0nn4_h3lp_y0Pure virtual function called!</code> which
+        is obviously wrong.
+      </p>
+
+      <p>
+        The decompiled function allowed me to understand what was happening. It
+        builds the string in three loops, each grabbing 8 characters from that
+        data at sequential offsets:
+      </p>
+
+      <pre>Loop 1 (offset 0x00): <span class="flag">CTF{gh1d</span>
+Loop 2 (offset 0x08): <span class="flag">r4_g0nn4</span>
+Loop 3 (offset 0x10): <span class="flag">_h3lp_y0</span>
+Then tacks on:         <span class="flag">!</span> and <span class="flag">}</span></pre>
+
+      <p>
+        <code>"Pure virtual function called!"</code> just happened to be sitting
+        right after the flag data in the read-only section. It's just a standard
+        C++ string.
+      </p>
+
+      <div class="callout win">
+        <strong>Flag:</strong>
+        <code class="flag">CTF{gh1dr4_g0nn4_h3lp_y0!}</code><br />
+        I had to actually read the decompiled code to get this one right.
+        <code>strings</code> alone gave me the wrong answer.
+      </div>
+
+      <hr class="separator" />
+
+      <h2 id="powershell">04 — PowerShell: Obfuscated Decryption Script</h2>
+
+      <p>
+        We were given a PowerShell script full of random stuff designed to
+        distract us.
+      </p>
+
+      <h3>The noise</h3>
+      <pre><span class="decoy">$obf = "f2OERT2bXUhzUkKSVI1>"</span>
+<span class="decoy">$this = "ignore_this_part_if_you_are_completely..."</span>
+<span class="decoy">$it = @(10, 20, 30, 40) | ForEach-Object { $_ * 3 }</span>
+<span class="decoy">Write-Host "Analyzing encrypted telemetry..."</span></pre>
+
+      <p>
+        Random variables that don't get used, arithmetic that goes nowhere and
+        fake console output.
+      </p>
+
+      <h3>The actual payload</h3>
+      <p>The real function in the script was an AES decryption routine:</p>
+      <pre>function hQ1pZ($d) {
+    $k = $env:CHALLENGE_KEY
+    $a = New-Object System.Security.Cryptography.AesManaged
+    $a.Mode = [System.Security.Cryptography.CipherMode]::ECB
+    $a.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+    $a.Key = [System.Text.Encoding]::UTF8.GetBytes($k)
+    $dc = $a.CreateDecryptor()
+    $r = uJ3z1 $d      <span class="hint"># base64 decode</span>
+    $o = $dc.TransformFinalBlock($r, 0, $r.Length)
+    return [System.Text.Encoding]::UTF8.GetString($o)
+}
+$encData = "<span class="key">EsBJfwiG7Veox9lSNJjYRQ==</span>"
+Write-Host ("Output: " + (hQ1pZ $encData))</pre>
+
+      <p>
+        It base64 decodes a string and decrypts it with AES-ECB. The key comes
+        from <code>$env:CHALLENGE_KEY</code>. There was also this function in
+        the script:
+      </p>
+      <pre>function eXa9d3B { return "<span class="key">ThisisIT</span>" }</pre>
+
+      <p>
+        After identifying the decryption function and working out the key,
+        running the script produced the flag. The hard part wasn't the crypto
+        itself, it was recognizing which parts of the script mattered and which
+        were there to waste time.
+      </p>
+      <hr class="separator" />
+
+      <h2 id="binaries">05 — Binaries: Pulling Flags with strings</h2>
+
+      <p>
+        We were also given a handful of compiled binaries. The flags were just
+        embedded as plaintext string literals inside the binary data.
+      </p>
+
+      <p>Finding this section's flags was really simple:</p>
+
+      <pre>strings compiled_binary | grep -i "CTF{"</pre>
+
+      <p>
+        <code>strings</code> pulls out anything that looks like readable text
+        from a binary file by default. Piped that into <code>grep</code> looking
+        for the flag format and I was done.
+      </p>
+
+      <p>
+        The trick was not overthinking it. I could've loaded these into Ghidra
+        or another disassembler, but that would've been overkill.
+        <code>strings</code> and <code>grep</code> got the job quickly.
+      </p>
+
+      <hr class="separator" />
+
+      <h2 id="ai">06 — AI Chatbot: Prompt Injection</h2>
+
+      <p>
+        We were given access to an AI chatbot with a flag somewhere in its
+        configuration.
+      </p>
+
+      <p>
+        What first came to mind is trying prompt engineering. I tried to get the
+        model to slip up and reveal stuff it was supposed to keep secret.
+        Looking at the response, nothing useful appeared. So I went a little
+        deeper and tried the same thing, but this time I monitored the responses
+        by intercepting them with Burp Suite. The flag was right there in the
+        raw JSON response.
+      </p>
+
+      <div class="callout">
+        The chatbot's only "security" was a system prompt telling it not to
+        reveal the flag. The actual API had no restrictions, the flag was in
+        every response, the frontend just didn't display it. A lot of real
+        products work the same way.
+      </div>
+
+      <hr class="separator" />
+
+      <h2 id="web">07 — Web</h2>
+
+      <p>
+        In the semi-final I got a flag by exploiting IDOR vulnerabilities. The
+        app had a mailing list page that displayed user IDs right in the UI:
+      </p>
+
+      <pre>
+ID: 1  — Alice
+ID: 2  — Bob
+ID: 3  — Charlie</pre
+      >
+
+      <p>The sign-out request looked something like:</p>
+
+      <pre>
+POST /api/class/signout
+{
+  "user_id": 1,
+  "class_id": 42
+}</pre
+      >
+
+      <p>
+        I grabbed a user's ID from the mailing list, intercepted the sign-out
+        request with Burp, swapped in their ID, and the server just processed
+        it. Their spot freed up, I registered, and found the flag.
+      </p>
+
+      <hr class="separator" />
+
+      <h2 id="team">08 — Team: OSINT &amp; Machine Exploitation</h2>
+
+      <p>
+        Other team members handled the OSINT challenges and the vulnerable
+        machine exploitation. Not writing those up since I wasn't the one
+        working them, but they contributed to our overall placement.
+      </p>
+
+      <hr class="separator" />
+
+      <h2>Tools</h2>
+
+      <ul class="tools-list">
+        <li>
+          <code>strings</code> + <code>grep</code>: first thing I ran on pretty
+          much everything, quick way to pull readable text out of binaries
+        </li>
+        <li>
+          <code>jadx</code>: APK decompilation, Java source and dex bytecode
+          inspection
+        </li>
+        <li>
+          <code>Ghidra</code>: native library disassembly and decompilation
+        </li>
+        <li>
+          <code>Burp Suite</code>: intercepting HTTP traffic, reading raw API
+          responses the frontend didn't show
+        </li>
+        <li>
+          <code>CyberChef</code>: encoding/decoding chains, quick crypto
+          operations
+        </li>
+        <li><code>CrackStation</code>: online hash lookup</li>
+        <li><code>base64 -d</code>: command line base64 decoding</li>
+      </ul>
+
+      <h2>What I took away from it</h2>
+
+      <p>
+        The biggest factor in placing 4th wasn't technical skill, it was time
+        management. I tried some basic web attacks like IDOR and SQL injection
+        early on, but most of the web challenges needed more thorough work that
+        would've come at the expense of easier points elsewhere. Same with
+        crypto: lots of trial and error and guessing versus something like
+        reverse engineering where I can just read the decompiled code and get a
+        clear answer. The PowerShell script was similar: running it didn't give
+        much, so I had to read it, ignore the noise, and find the one function
+        that was relevant. Knowing when to move on was worth more than solving
+        some of the challenges. The sunk cost fallacy doesn't care about your
+        scoreboard.
+      </p>
+
+      <footer>
+        <a class="back" href="index.html">
+          <svg
+            width="12"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          all posts
+        </a>
+      </footer>
+    </div>
+  </body>
+</html>
