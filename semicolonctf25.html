@@ -172,19 +172,12 @@ e94fd5250dcca0a3b0cea1651f0a821b              — Line 4</pre>
 <span class="path">lib/armeabi-v7a/libnative-lib.so</span>
 <span class="path">lib/x86_64/libnative-lib.so</span></pre>
 
-      <div class="callout warn">
-        <code>CTF{this_is_not_the_flag}</code> was everywhere. Dozens of times.
-        It's there to flood my <code>grep</code> output so I can't just blindly
-        pipe my way to the answer, I had to actually look at where each string
-        lives and decide if it's real.
+      <div>
+        <code>CTF{this_is_not_the_flag}</code> was everywhere. It flooded my
+        <code>grep</code> output so I couldn't blindly pipe my way to the
+        answer, I had to actually look at where each string lives and decide if
+        it's real.
       </div>
-
-      <p>
-        There was also a partial match in <code>res/kX.xml</code>, some
-        obfuscated resource XML. The resource flag
-        <code>CTF{r3s0urc3_hunt3r_2024}</code> showed up in both
-        <code>resources.arsc</code> and the APK itself.
-      </p>
 
       <hr class="separator" />
 
@@ -200,8 +193,7 @@ e94fd5250dcca0a3b0cea1651f0a821b              — Line 4</pre>
 public class Tryhard extends AppCompatActivity {
     static { System.loadLibrary("za23jhfbsdveq"); }
     public native String ehjfbidphfaw();
-}</pre
-      >
+}</pre>
 
       <p>
         This just loads the lib and calls a native method with a gibberish name.
@@ -241,13 +233,6 @@ Then tacks on:         <span class="flag">!</span> and <span class="flag">}</spa
         right after the flag data in the read-only section. It's just a standard
         C++ string.
       </p>
-
-      <div class="callout win">
-        <strong>Flag:</strong>
-        <code class="flag">CTF{gh1dr4_g0nn4_h3lp_y0!}</code><br />
-        I had to actually read the decompiled code to get this one right.
-        <code>strings</code> alone gave me the wrong answer.
-      </div>
 
       <hr class="separator" />
 
@@ -341,11 +326,10 @@ Write-Host ("Output: " + (hQ1pZ $encData))</pre>
         raw JSON response.
       </p>
 
-      <div class="callout">
+      <div>
         The chatbot's only "security" was a system prompt telling it not to
         reveal the flag. The actual API had no restrictions, the flag was in
-        every response, the frontend just didn't display it. A lot of real
-        products work the same way.
+        every response, the frontend just didn't display it.
       </div>
 
       <hr class="separator" />
@@ -360,8 +344,7 @@ Write-Host ("Output: " + (hQ1pZ $encData))</pre>
       <pre>
 ID: 1  — Alice
 ID: 2  — Bob
-ID: 3  — Charlie</pre
-      >
+ID: 3  — Charlie</pre>
 
       <p>The sign-out request looked something like:</p>
 
@@ -370,8 +353,7 @@ POST /api/class/signout
 {
   "user_id": 1,
   "class_id": 42
-}</pre
-      >
+}</pre>
 
       <p>
         I grabbed a user's ID from the mailing list, intercepted the sign-out

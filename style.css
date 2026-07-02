@@ -181,7 +181,7 @@ h3 {
   margin-top: 2rem;
   margin-bottom: 0.5rem;
   color: var(--blue);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "Inter", sans-serif;
 }
 
 p {
@@ -227,15 +227,6 @@ pre {
 }
 .key {
   color: var(--teal);
-}
-
-.callout {
-  border-left: 3px solid var(--mauve);
-  padding: 0.75rem 1rem;
-  margin: 1.5rem 0;
-  background: var(--mantle);
-  border-radius: 0 4px 4px 0;
-  font-size: 0.9rem;
 }
 
 .callout.warn {
@@ -315,7 +306,7 @@ pre {
 }
 
 .section-label {
-  font-family: "JetBrains Mono", monospace;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   color: var(--surface1);
   text-transform: uppercase;
